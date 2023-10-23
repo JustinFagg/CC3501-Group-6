@@ -3,166 +3,238 @@
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 
-#include "WS2812.pio.h" // This header file gets produced during compilation from the WS2812.pio file
+#include "WS2812.pio.h" 
 #include "drivers/logging/logging.h"
-#include "drivers/led/led.h"
 #include "drivers/lis3dh/lis3dh.h"
-#include "drivers/mic/mic.h"
+
+#include "hardware/i2c.h"
+#include "drivers/ssd1306/ssd1306.h"
 #include "arm_math.h"
 
+#include "drivers/keypad/keypad.h"
+#include "hardware/adc.h"
 
 
-#define SW1 15
 
+#define pin_SW1             14
+#define pin_SW2             15
 
+// #define pin_R1              10
+// #define pin_R2              5
+// #define pin_R3              6
+// #define pin_R4              8
+// #define pin_C1              9
+// #define pin_C2              11
+// #define pin_C3              7
+#define pin_R1              11
+#define pin_R2              10
+#define pin_R3              9
+#define pin_R4              8
+#define pin_C1              7
+#define pin_C2              6
+#define pin_C3              5
+
+#define pin_I2C0_SDA        12
+#define pin_I2C0_SCL        13
+
+#define pin_fuel            19
+
+#define pin_Blue_RST        18
+#define pin_Blue_CTS        22
+#define pin_Blue_RTS        23
+#define pin_Blue_Tx         24
+#define pin_Blue_Rx         25
+
+#define pin_ADC_Ignition    28
+
+// Define the GPIO connected to keypad rows and columns (ordering important)
+const uint rowPins[] = {pin_R1, pin_R2, pin_R3, pin_R4};
+const uint colPins[] = {pin_C1, pin_C2, pin_C3};
+
+// Define the I2C address of the SSD1306 OLED display
+#define OLED_I2C_ADDRESS 0x3C
+
+uint8_t turnoff[1]={0xAE};
+uint8_t turnon[1]={0xAF};
+uint8_t DISPLAY_INITT[27] = {
+    0xAE,  // Display Off
+    0x20, 0x00,  // Set Memory Addressing Mode to Horizontal addressing mode
+    0x40,  // Set display start line to 0
+    0xA1,  // Set segment remap
+    0xA8, 0x3F,  // Set multiplex ratio (1/64 duty)
+    0xC8,  // Set COM Output Scan Direction
+    0xD3, 0x00,  // Set display offset
+    0xDA, 0x12,  // Set COM Pins hardware configuration
+    0xD5, 0x80,  // Set display clock divide ratio/oscillator frequency
+    0xD9, 0xF1,  // Set pre-charge period
+    0xDB, 0x30,  // Set VCOMH Deselect Level
+    0x81, 0xFF,  // Set contrast control
+    0xA4,  // Entire Display On, Output follows RAM content
+    0xA6,  // Normal display (not inverted)
+    0x8D, 0x14,  // Enable charge pump regulator
+    0xAF,  // Display On
+    0x2E,   // Deactivate scrolling
+
+    0xC0    // Invert Something
+};
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define uart_num uart1
+#define baud_rate 115200 // Baud rate (adjust as needed)
 
 
 int main()
 {
-    //Init
     stdio_init_all();
-    led_init();
-    i2c_init();
-    int16_t my_result[3] = {};
-    mic_init(); 
-    #define mic_size 1024
-    uint16_t adc_test[mic_size] = {};  
 
+    gpio_set_dir(pin_SW1, 0);
+    gpio_set_dir(pin_SW2, 0);
+    int code = 1;
+    int start = 0;
 
-    #define uart_num uart1
-    #define tx_pin 8     // GPIO8 (TX)
-    #define rx_pin 9     // GPIO9 (RX)
-    #define baud_rate 115200 // Baud rate (adjust as needed)
-    
     // Initialize UART
     uart_init(uart_num, baud_rate);
     
     // Set UART pins
-    gpio_set_function(tx_pin, GPIO_FUNC_UART);
-    gpio_set_function(rx_pin, GPIO_FUNC_UART);
+    gpio_set_function(pin_Blue_Tx, GPIO_FUNC_UART);
+    gpio_set_function(pin_Blue_Rx, GPIO_FUNC_UART);
+
+    // Example
+    // uart_puts(uart_num, "stuff");
+
+    // Setup keyboard
+    keypad_init(colPins, rowPins);
+    display_init();
+    send_cmd(DISPLAY_INITT, sizeof(DISPLAY_INITT) / sizeof(uint8_t));
+ 
 
 
+    /////////////////////Extra
+    int secretCode[4] = {6,9,3,5};
+    int myNumber[4];
+    char myConstChar[9] = "        ";
+    char myBlankConstChar[9] = "        ";
+    //////////////////////////
+    display_text(myBlankConstChar, 1, 1);
 
 
-
-    arm_rfft_init_q15;
-    int32_t DCbias = 0;
-
-    //Lab setup
-    gpio_set_dir(SW1, 0);
-    int Lab = 5;
-   
-    //Clear LED
-    led_all();
-    led_load();
+    gpio_init(pin_fuel);
+    gpio_set_dir(pin_fuel,1);
+    gpio_put(pin_fuel,0);
 
 
-    /////////////////////////////////////////////////////Rainbow
-    int red = 255, green = 0, blue = 0;
-    int test = 0;
-    /////////////////////////////////////////////////////////
+    // Set up the ADC on the Pico
+    adc_init();
+    adc_gpio_init(pin_ADC_Ignition); // Set the GPIO pin you want to read from (e.g., GPIO 26)
+    adc_select_input(2); // Select ADC channel 0
 
     for (;;) {
-
-        if (Lab == 5){
-        // Write data to Bluetooth module
-        uart_putc(uart_num, 'H'); // Send 'H' (example)
-        uart_putc(uart_num, 'i'); // Send 'i' (example)
-
-        // Delay for a moment before sending more data
-        sleep_ms(1000); // Delay for 1 second (adjust as needed)
-        }
-
-
-        if (Lab == 6){
-            if ((test < 255)&&(test >= 0))
-            {
-                red--;
-                blue++;
-            }
-            if ((test < 510)&&(test >= 255))
-            {
-                blue--;
-                green++;
-            }
-            if ((test < 765)&&(test >= 510))
-            {
-                green--;
-                red++;
-            }
-            test ++;
-            if (test >= 766){
-                test=0;
-            }
-            if ((test%50)==0){
-                led_spin();
-                led_set(0,red/3, green/3, blue/3);
-                led_load();
-                sleep_ms(10);
-            }
-        }
-
-
-        if (Lab == 7){
-            led_all();
-            led_load();
-
-            sleep_ms(1000);
-
-            led_set(4,128,0,128);
-            led_load();
-
-            sleep_ms(1000);
-
-            led_set(7,64,224,208);
-            led_load();
-
-            sleep_ms(1000);
-
-            led_set(5,127,10,235);
-            led_set(6,235,10,127);
-            led_load();
-
-            sleep_ms(1000);
-        }   
-
-
-        if (Lab == 8){
-            // Read the "0x28" register
-            i2c_reads(n28, my_result);
-                led_all();
-                if (my_result[0]<130&&my_result[0]>-130&&my_result[1]<130&&my_result[1]>-130&&my_result[2]<130&&my_result[2]>-130){   
-                    led_set(int(my_result[0]/62+2),75,0,0);
-                    led_set(int(my_result[1]/62+6),0,75,0);
-                    led_set(int(my_result[2]/62+10),0,0,75); 
-                }
-                snprintf(buf, count,"X: %d\nY: %d\nZ: %d", my_result[0], my_result[1], my_result[2])
-                uart_puts(uart_num, "test");
-            led_load();
-        }
-
-
-        if (Lab == 9){
-            mic_read(adc_test,mic_size);
-        }
-
-
-        if (Lab == 10){
-
+        // code = 10;
+        // while (code == 10){
             
+        // }
 
-        }
 
-        if (gpio_get(SW1)){
-            Lab++;
-            if (Lab == 11){
-                Lab = 4;
+
+        if (code != 0){
+            //Button grid test
+            char key = keypad();
+            if (key != '\0') {
+                if ((key != '*') && (key != '#')){
+                    if (code!=0){
+                        if (code == 1){send_cmd(turnon,sizeof(turnon) / sizeof(uint8_t));}
+                        if (code<5){
+                            myNumber[code-1] = key-48;
+                            myBlankConstChar[2*(code-1)+1] = '*';
+                            myConstChar[2*(code-1)+1] = key;
+                            code+=1;
+                            display_text(myBlankConstChar, 1, 1);
+                        }
+                        if (code==5){
+                            if ((myNumber[0]==secretCode[0])*(myNumber[1]==secretCode[1])*(myNumber[2]==secretCode[2])*(myNumber[3]==secretCode[3])){
+                                code = 0;
+                                start = 1;
+                                char myString[] = "Start!";
+                                display_text(myString, 1, 1);
+                                sleep_ms(1000);
+                            }
+                            else{
+                                display_text(myConstChar, 1, 1);
+                                code = 1;
+                                for (int i=0;i<3;i++){
+                                    sleep_ms(500);
+                                    send_cmd(turnoff,sizeof(turnoff) / sizeof(uint8_t));
+                                    sleep_ms(400);
+                                    send_cmd(turnon,sizeof(turnon) / sizeof(uint8_t));
+                                }
+                                for (int i=0;i<4;i++){
+                                    myNumber[i]=0;
+                                    myConstChar[2*i]=' ';
+                                    myConstChar[2*i+1]=' ';
+                                    myBlankConstChar[2*i]=' ';                            
+                                    myBlankConstChar[2*i+1]=' ';
+                                }
+                                display_text(myBlankConstChar, 1, 1);
+                                send_cmd(turnoff,sizeof(turnoff) / sizeof(uint8_t));
+                            }
+                        }
+                        sleep_ms(50);
+                        while(keypad() != '\0'){}
+                    }
+                }
             }
-            led_all(1);
-            led_load();
-            sleep_ms(3000);
-            led_all(0);
-            led_load();
         }
+        else if (start == 1){
+            gpio_put(pin_fuel,1);
+            uint16_t result = adc_read(); // Read the ADC value
+            while(result<=500){
+                result = adc_read(); // Read the ADC value
+            }
+            sleep_ms(20000);
+            while(result>=500){
+                result = adc_read(); // Read the ADC value
+            }
+            start=0;
+            code=1;
+            for (int i=0;i<4;i++){
+                myNumber[i]=0;
+                myConstChar[2*i]=' ';
+                myConstChar[2*i+1]=' ';
+                myBlankConstChar[2*i]=' ';                            
+                myBlankConstChar[2*i+1]=' ';
+            }
+            display_text(myBlankConstChar, 1, 1);
+        }
+        if (start == 0){
+            gpio_put(pin_fuel,0);
+        }
+
+
+
+
+        if (gpio_get(pin_SW1)){
+            code++;
+            if (code == 11){
+                code = 0;
+            }
+            gpio_put(pin_fuel,1);
+            start=1;
+        }
+        if (gpio_get(pin_SW2)){
+            code--;
+            if (code == -1){
+                code = 9;
+            }
+            gpio_put(pin_fuel,0);
+            start=0;
+        }
+
+
+        // uint16_t result = adc_read(); // Read the ADC value
+        // char testing[6];
+        // // Format the uint16_t as a string
+        // sprintf(testing, "%u", result);
+        // display_text(testing, 1, 1);
     }
 }

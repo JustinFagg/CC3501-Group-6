@@ -21,6 +21,7 @@ if(CrossCompiling)
 
     # Pull in Raspberry Pi Pico SDK (must be before project)
     include(pico_sdk_import.cmake)
+    include(pico_sdk_import2.cmake)
 
     project(cc3501-labs C CXX ASM)
     
@@ -53,9 +54,9 @@ if(CrossCompiling)
         PUBLIC
         src/main.cpp
         src/drivers/logging/logging.cpp
-        src/drivers/led/led.cpp
         src/drivers/lis3dh/lis3dh.cpp
-        src/drivers/mic/mic.cpp
+        src/drivers/ssd1306/ssd1306.cpp
+        src/drivers/keypad/keypad.cpp
     )
     target_include_directories(labs
         PUBLIC 
@@ -108,6 +109,8 @@ else()
         tests/mocks/hardware/gpio.cpp
         tests/mocks/hardware/pio.cpp
         tests/mocks/ws2812.cpp
+        src/drivers/ssd1306/ssd1306.cpp
+        src/drivers/keypad/keypad.cpp
     )
     target_include_directories(labs
         PUBLIC 
