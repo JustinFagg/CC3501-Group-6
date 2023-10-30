@@ -14,11 +14,15 @@
 #include "drivers/keypad/keypad.h"
 #include "hardware/adc.h"
 
+#include "hardware/uart.h"
+#include "hardware/irq.h"
+#include "drivers/bluetooth/blue.h"
 
 
 #define pin_SW1             14
 #define pin_SW2             15
 
+//for the other pinpad
 // #define pin_R1              10
 // #define pin_R2              5
 // #define pin_R3              6
@@ -26,6 +30,8 @@
 // #define pin_C1              9
 // #define pin_C2              11
 // #define pin_C3              7
+
+//for current pinpad
 #define pin_R1              11
 #define pin_R2              10
 #define pin_R3              9
@@ -38,12 +44,6 @@
 #define pin_I2C0_SCL        13
 
 #define pin_fuel            19
-
-#define pin_Blue_RST        18
-#define pin_Blue_CTS        22
-#define pin_Blue_RTS        23
-#define pin_Blue_Tx         24
-#define pin_Blue_Rx         25
 
 #define pin_ADC_Ignition    28
 
@@ -77,14 +77,12 @@ uint8_t DISPLAY_INITT[27] = {
 
     0xC0    // Invert Something
 };
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define uart_num uart1
-#define baud_rate 115200 // Baud rate (adjust as needed)
 
 
 int main()
+
+
 {
     stdio_init_all();
 
@@ -93,15 +91,7 @@ int main()
     int code = 1;
     int start = 0;
 
-    // Initialize UART
-    uart_init(uart_num, baud_rate);
-    
-    // Set UART pins
-    gpio_set_function(pin_Blue_Tx, GPIO_FUNC_UART);
-    gpio_set_function(pin_Blue_Rx, GPIO_FUNC_UART);
-
-    // Example
-    // uart_puts(uart_num, "stuff");
+    blue_init();
 
     // Setup keyboard
     keypad_init(colPins, rowPins);
@@ -112,36 +102,69 @@ int main()
 
     /////////////////////Extra
     int secretCode[4] = {6,9,3,5};
+    int MysecretCode[4] = {6,9,3,5};
     int myNumber[4];
     char myConstChar[9] = "        ";
     char myBlankConstChar[9] = "        ";
     //////////////////////////
     display_text(myBlankConstChar, 1, 1);
-
+    int saved = 5;
 
     gpio_init(pin_fuel);
     gpio_set_dir(pin_fuel,1);
     gpio_put(pin_fuel,0);
-
 
     // Set up the ADC on the Pico
     adc_init();
     adc_gpio_init(pin_ADC_Ignition); // Set the GPIO pin you want to read from (e.g., GPIO 26)
     adc_select_input(2); // Select ADC channel 0
 
+    blue_init();
+    
     for (;;) {
-        // code = 10;
-        // while (code == 10){
-            
-        // }
-
-
+    
 
         if (code != 0){
             //Button grid test
             char key = keypad();
             if (key != '\0') {
-                if ((key != '*') && (key != '#')){
+                if ((key == '*')&&(code!=1)){
+                    code--;
+                    myBlankConstChar[2*(code-1)+1] = ' ';
+                    display_text(myBlankConstChar, 1, 1);
+                    sleep_ms(50);
+                    while(keypad() != '\0'){}
+                }
+                else if (key == '#'){
+                    sleep_ms(50);
+                    while(keypad() != '\0'){}
+                    code = 1;
+                        for (int i=0;i<4;i++){
+                            myConstChar[2*i]=' ';
+                            myConstChar[2*i+1]=' ';
+                            myBlankConstChar[2*i]=' ';                            
+                            myBlankConstChar[2*i+1]=' ';
+                        }
+                        display_text("Looking", 1, 1);
+
+                        blue_send("---\r\n");
+                        blue_send("$$$");
+                        blue_send("d\r\n");
+                        blue_send("---\r\n");
+                        blue_send("---");
+
+                        if (blue_scan()){
+                            code = 0;
+                            start = 1;
+                            char myString[] = "Start!";
+                            display_text(myString, 1, 1);
+                            sleep_ms(1000);
+                        }
+                        else{                        
+                            display_text("UnFound", 1, 1);
+                        }
+                }
+                else{
                     if (code!=0){
                         if (code == 1){send_cmd(turnon,sizeof(turnon) / sizeof(uint8_t));}
                         if (code<5){
@@ -152,7 +175,8 @@ int main()
                             display_text(myBlankConstChar, 1, 1);
                         }
                         if (code==5){
-                            if ((myNumber[0]==secretCode[0])*(myNumber[1]==secretCode[1])*(myNumber[2]==secretCode[2])*(myNumber[3]==secretCode[3])){
+                            if (MysecretCode[3] == -1){MysecretCode[3] = saved;}
+                            if ((myNumber[0]==MysecretCode[0])*(myNumber[1]==MysecretCode[1])*(myNumber[2]==MysecretCode[2])*(myNumber[3]==MysecretCode[3])){
                                 code = 0;
                                 start = 1;
                                 char myString[] = "Start!";
@@ -184,6 +208,60 @@ int main()
                     }
                 }
             }
+            
+            if ((gpio_get(pin_SW1))||(gpio_get(pin_SW2))){
+                saved = MysecretCode[3];
+                for (int i=0;i<4;i++){
+                    myConstChar[2*i]=' ';
+                    myConstChar[2*i+1]=' ';
+                    myBlankConstChar[2*i]=' ';                            
+                    myBlankConstChar[2*i+1]=' ';
+                }
+                display_text("NewCode",0,0);
+                blue_send("---\r\n");
+                blue_send("$$$");
+                blue_send("d\r\n");
+                blue_send("---\r\n");
+                blue_send("---");
+                if (blue_steal()){
+                    code = 1;
+                    display_text("      ",1,1);
+                }
+                else {
+                    code = 1;
+                    while (code != 5){
+                        char key = keypad();
+                        if (key != '\0'){
+                            if ((key == '*')&&(code!=1)){
+                            code--;
+                            myConstChar[2*(code-1)+1] = ' ';
+                            display_text(myConstChar, 1, 1);
+                            sleep_ms(50);
+                            while(keypad() != '\0'){}
+                        }
+                            else if (key == '#'){
+                            code = 1;
+                                for (int i=0;i<4;i++){
+                                    myConstChar[2*i]=' ';
+                                    myConstChar[2*i+1]=' ';
+                                }
+                                display_text(myConstChar, 1, 1);
+                            sleep_ms(50);
+                            while(keypad() != '\0'){}
+                        }
+                            else if (code != 0){
+                                MysecretCode[code-1] = key-48;
+                                myBlankConstChar[2*(code-1)+1] = '*';
+                                myConstChar[2*(code-1)+1] = key;
+                                code+=1;
+                                display_text(myConstChar, 1, 1);
+                                sleep_ms(50);
+                                while(keypad() != '\0'){}
+                            }
+                        }
+                    }
+                }
+            }
         }
         else if (start == 1){
             gpio_put(pin_fuel,1);
@@ -191,7 +269,7 @@ int main()
             while(result<=500){
                 result = adc_read(); // Read the ADC value
             }
-            sleep_ms(20000);
+            sleep_ms(5000);
             while(result>=500){
                 result = adc_read(); // Read the ADC value
             }
@@ -209,32 +287,5 @@ int main()
         if (start == 0){
             gpio_put(pin_fuel,0);
         }
-
-
-
-
-        if (gpio_get(pin_SW1)){
-            code++;
-            if (code == 11){
-                code = 0;
-            }
-            gpio_put(pin_fuel,1);
-            start=1;
-        }
-        if (gpio_get(pin_SW2)){
-            code--;
-            if (code == -1){
-                code = 9;
-            }
-            gpio_put(pin_fuel,0);
-            start=0;
-        }
-
-
-        // uint16_t result = adc_read(); // Read the ADC value
-        // char testing[6];
-        // // Format the uint16_t as a string
-        // sprintf(testing, "%u", result);
-        // display_text(testing, 1, 1);
     }
 }

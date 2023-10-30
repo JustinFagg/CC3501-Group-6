@@ -1,7 +1,7 @@
 #include "pico/stdlib.h"
 #include "lis3dh.h"
 #include "hardware/i2c.h"
-
+    
 //LIS3DH registers
 int turn_on = 0x20;
 int  turn_on2 = 0x97;

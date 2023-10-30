@@ -57,6 +57,7 @@ if(CrossCompiling)
         src/drivers/lis3dh/lis3dh.cpp
         src/drivers/ssd1306/ssd1306.cpp
         src/drivers/keypad/keypad.cpp
+        src/drivers/bluetooth/blue.cpp
     )
     target_include_directories(labs
         PUBLIC 
@@ -111,6 +112,7 @@ else()
         tests/mocks/ws2812.cpp
         src/drivers/ssd1306/ssd1306.cpp
         src/drivers/keypad/keypad.cpp
+        src/drivers/bluetooth/blue.cpp
     )
     target_include_directories(labs
         PUBLIC 

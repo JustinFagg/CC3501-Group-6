@@ -21,64 +21,16 @@ const uint8_t COMMAND_BYTE = 0x80;
 const uint8_t DATA_BYTE = 0x40;
 const uint8_t OLED_ID = 0x3C;
 
-/* fundamental command table */
-const char SET_CONTRAST = 0x81;
-const char DISPLAY_RESUME_RAM = 0xA4;
-const char DISPLAY_IGNORE_RAM = 0xA5;
-const char INVERT_FALSE = 0xA6;
-const char INVERT_TRUE = 0xA7;
-const char DISPLAY_SLEEP = 0xAE;
-const char DISPLAY_ON = 0xAF;
-
-/* scrolling command table */
-
-/* address setting command table */
-const char SET_LOW_COL = 0x0; // page addressing mode only
-const char SET_HI_COL = 0x10; // page addressing mode only
-const char SET_MEM_MODE =
-    0x20; // 2 bytes; 0b - horizontal;  1b - vertical; 10b page addressing mode
-const char SET_COL_ADDR = 0x21;   // 3 bytes; 0 - 127d start; 0 - 127d end
-const char SET_PAGE_ADDR = 0x22;  // 3 bytes; 0 - 7d start; 0 - 7d end
-const char SET_PAGE_START = 0xB0; // | 0-7d page addressing mode
-
-/* hardware configuration command table */
-const char SET_DISPLAY_START = 0x40; // | 0-63d
-const char SET_SEG_REMAP =
-    0xA0; // | 0 - col 0 map to seg0; 1 - col 127 mapped to seg0
-const char SET_MULTIPLEX_RATIO = 0xA8; // 2 bytes; 15-63
-
 const uint8_t DISPLAY_RESET[] = {0x00, 0x21, 0x0, 0x7f, 0x22, 0x0, 0x7};
 
-// void send_cmd(uint8_t data[], size_t len) {
-//   uint8_t *outdata = malloc(len + 1);
-//   outdata[0] = 0x00;
-//   memcpy(outdata + 1, data, len);
-//   i2c_write_blocking(i2c_default, OLED_ID, outdata, len + 1, false);
-//   free(outdata);
-// }
 
 void send_cmd(uint8_t data[], size_t len) {
     std::vector<uint8_t> outdata(len + 1);
     outdata[0] = 0x00;
     std::copy(data, data + len, outdata.begin() + 1);
     i2c_write_blocking(i2c_default, OLED_ID, outdata.data(), len + 1, false);
-    // No need to free outdata; vector takes care of memory management
 }
 
-
-// void send_data(uint8_t data[8][128]) {
-//   int outsize = 8 * 128 + 1;
-//   uint8_t *outdata = malloc(outsize);
-//   i2c_write_blocking(i2c_default, OLED_ID, DISPLAY_RESET, 7, false);
-//   outdata[0] = DATA_BYTE;
-//   for (int i = 0; i < 8; i++) {
-//     for (int k = 0; k < 128; k++) {
-//       outdata[1 + (i * 128) + k] = data[i][k];
-//     }
-//   }
-//   i2c_write_blocking(i2c_default, OLED_ID, outdata, outsize, false);
-//   free(outdata);
-// }
 
 void send_data(uint8_t data[8][128]) {
     int outsize = 8 * 128 + 1;
@@ -99,15 +51,12 @@ void send_data(uint8_t data[8][128]) {
 
     // Send the data via I2C
     i2c_write_blocking(i2c_default, OLED_ID, outdata.data(), outsize, false);
-    // No need to free outdata; vector takes care of memory management
 }
 
 
 
 
-// This array contains the font data for basic ASCII characters in an 8x8 format with a line of zeros at the top and bottom.
-// Constant: font8x8_basic
-// Contains an 8x8 font map for unicode points U+0000 - U+007F (basic latin)
+// This array contains the font data for basic ASCII characters in an 8x8 format
 char font8x8_basic[128-33][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0020 (space)
     { 0x18, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x18, 0x00},   // U+0021 (!)
@@ -208,25 +157,24 @@ char font8x8_basic[128-33][8] = {
 
 // Function to send text to the display
 void display_text(char text[], uint8_t row, uint8_t column) {
-    uint8_t data[8][128] = {0};  // Initialize an empty display buffer
+    uint8_t data[8][128] = {0};
     // Assuming a 128x64 display and 8x8 font
     for (int i = strlen(text) - 1; i >= 0; i--) {
         char character = text[i];
         if (character >= ' ' && character <= '~') {
-            // Display printable ASCII characters
             int font_index = character - ' ';
             for (int r = 0; r < 8; r++) {
                 uint8_t font_byte = font8x8_basic[font_index][r];
                 for (int c = 0; c < 8; c++) {
                     if (font_byte & (1 << c)) {
-                        data[row + r][column + (strlen(text) - 1 - i) * 16 + 15 - 2 * c] = 0xff;  // Turn on pixels
-                        data[row + r][column + (strlen(text) - 1 - i) * 16 + 15 - 2 * c + 1] = 0xff;  // Turn on pixels
+                        data[row + r][column + (strlen(text) - 1 - i) * 16 + 15 - 2 * c] = 0xff;  // Turn on pixel strip
+                        data[row + r][column + (strlen(text) - 1 - i) * 16 + 15 - 2 * c + 1] = 0xff;  // Turn on pixels strip
                     }
                 }
             }
         }
     }
-    send_data(data);  // Send the display buffer to the OLED
+    send_data(data);  // Send to display buffer
 }
 
 
